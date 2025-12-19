@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>imu_clean</name>
+  <version>1.0.0</version>
+  <description>IMU数据清洗ROS包，支持C++/Python版本，6/9轴适配，野值检测+填充</description>
+  <maintainer email="2634327876@qq.com">Haozhe Wang Neal</maintainer>
+  <license>MIT</license>
+
+  <!-- 依赖 -->
+  <buildtool_depend>catkin</buildtool_depend>
+  
+
+
+  <!-- C++依赖 -->
+  <build_depend>roscpp</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>eigen3</build_depend>
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  
+
+
+
+  <!-- Python依赖 -->
+  <build_depend>rospy</build_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+
+  <export>
+    <build_type>catkin</build_type>
+  </export>
+</package>
