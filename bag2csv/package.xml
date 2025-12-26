@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>bag2csv</name>
+  <version>1.0.0</version>
+  <description>ROS bag文件转CSV工具包，支持C++/Python版本，可提取指定话题数据</description>
+  <maintainer email="2634327876@qq.com">Haozhe Wang Neal</maintainer>
+  <license>MIT</license>
+
+  <!-- 构建工具依赖 -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- C++依赖 -->
+  <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>rosbag</build_depend>  <!-- 处理bag文件的核心依赖 -->
+  <build_depend>geometry_msgs</build_depend>  <!-- 处理常见消息类型 -->
+  
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>rosbag</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+
+  <!-- Python依赖 -->
+  <exec_depend>python3-csv</exec_depend>  <!-- 标准CSV库 -->
+  <exec_depend>python3-os</exec_depend>   <!-- 文件系统操作 -->
+
+  <export>
+    <build_type>catkin</build_type>
+  </export>
+</package
