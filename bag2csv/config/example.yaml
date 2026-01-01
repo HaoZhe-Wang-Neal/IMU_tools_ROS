@@ -1,0 +1,22 @@
+# bag2csv example configuration
+# For detailed parameter descriptions, see README.md
+
+# 输入bag文件路径 (必须)
+input_bag: "/path/to/data.bag"
+
+# 输出CSV目录 (必须)
+output_dir: "/path/to/output"
+
+# 目标话题 (JSON数组格式，不指定则转换所有话题)
+target_topics:
+  - "/imu/data"
+  - "/sensor/mag"
+
+# 是否包含CSV头部
+include_header: true
+
+# 时间格式: sec (default), ns (nanoseconds), ms (milliseconds)
+time_format: "sec"
+
+# 详细日志
+verbose: false

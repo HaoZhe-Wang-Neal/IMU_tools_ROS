@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- 输入bag文件路径 -->
+  <arg name="input_bag" default="/path/to/data.bag" doc="Input ROS bag file path"/>
+  
+  <!-- 输出CSV目录 -->
+  <arg name="output_dir" default="/path/to/output" doc="Output directory for CSV files"/>
+  
+  <!-- 目标话题（JSON数组格式） -->
+  <arg name="target_topics" default="[]" doc="Target topics (e.g., ['/imu/data', '/odom'])"/>
+  
+  <!-- 选项参数 -->
+  <arg name="include_header" default="true" doc="Include CSV header"/>
+  <arg name="time_format" default="sec" doc="Time format: sec/ns/ms"/>
+  <arg name="verbose" default="false" doc="Enable verbose logging"/>
+
+  <!-- 启动Python节点 -->
+  <node pkg="bag2csv" type="bag2csv_node.py" name="bag2csv" output="screen">
+    <param name="input_bag" value="$(arg input_bag)"/>
+    <param name="output_dir" value="$(arg output_dir)"/>
+    <param name="target_topics" value="$(arg target_topics)"/>
+    <param name="include_header" value="$(arg include_header)"/>
+    <param name="time_format" value="$(arg time_format)"/>
+    <param name="verbose" value="$(arg verbose)"/>
+  </node>
+</launch>

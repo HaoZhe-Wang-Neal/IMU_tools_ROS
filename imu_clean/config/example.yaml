@@ -1,0 +1,23 @@
+# IMU数据清洗配置文件
+imu_clean:
+  # 基础配置
+  imu_topic: "/imu/data"          # 原始IMU数据话题（加速度+角速度）
+  mag_topic: "/imu/mag"           # 磁力计数据话题（9轴IMU启用）
+  output_topic: "/imu/cleaned"    # 清洗后IMU数据输出话题
+  is_9axis: true                  # 是否启用9轴IMU（包含磁力计）
+  frame_id: "imu_link"            # IMU坐标系ID
+
+  # 滑动窗口配置（3σ过滤依赖）
+  window_size: 20                 # 滑动窗口大小（默认20个数据点）
+  sigma_multiplier: 3.0           # 3σ原则的σ倍数（默认3.0）
+
+  # 物理阈值配置（兜底过滤极端值）
+  accel_max: 20.0                 # 加速度最大值 (m/s²)
+  accel_min: -20.0                # 加速度最小值 (m/s²)
+  gyro_max: 5.0                   # 角速度最大值 (rad/s)
+  gyro_min: -5.0                  # 角速度最小值 (rad/s)
+  mag_max: 500.0                  # 磁力计最大值 (uT)
+  mag_min: -500.0                 # 磁力计最小值 (uT)
+
+  # 数据发布频率
+  publish_rate: 100.0             # 清洗后数据发布频率 (Hz)
