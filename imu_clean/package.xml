@@ -11,22 +11,24 @@
   
 
 
-  <!-- C++依赖 -->
+<buildtool_depend>catkin</buildtool_depend>
   <build_depend>roscpp</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>eigen3</build_depend>
-  <exec_depend>roscpp</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  
-
-
-
-  <!-- Python依赖 -->
   <build_depend>rospy</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>dynamic_reconfigure</build_depend>
+  <build_depend>boost</build_depend>
+  <build_depend>eigen</build_depend>
+  
+  <exec_depend>roscpp</exec_depend>
   <exec_depend>rospy</exec_depend>
-  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>dynamic_reconfigure</exec_depend>
+  <exec_depend>boost</exec_depend>
+  <exec_depend>eigen</exec_depend>
 
   <export>
-    <build_type>catkin</build_type>
+    <build_type>cmake</build_type>
   </export>
 </package>

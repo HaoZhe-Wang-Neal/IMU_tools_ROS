@@ -1,102 +1,117 @@
-#!/usr/bin/env python3
+from __future__ import division, print_function, unicode_literals
+
 import rospy
 import rosbag
+import sys
 import csv
 import os
-from os.path import join, exists, basename
-from bag2csv_config import Bag2CSVConfig
+from sensor_msgs.msg import Imu, MagneticField
+from collections import defaultdict
 
-class Bag2CSVConverter:
-    def __init__(self):
-        self.config = Bag2CSVConfig()
-        self.config.load_from_ros_params()
-        self._init_output_dir()
+def load_params():
+    """加载ROS参数（带默认值）"""
+    params = {
+        "bag_path": rospy.get_param("~bag_path", "$(find bag2csv)/data/imu.bag"),
+        "csv_path": rospy.get_param("~csv_path", "$(find bag2csv)/output/imu_data.csv"),
+        "imu_topic": rospy.get_param("~imu_topic", "/imu/data_raw"),
+        "mag_topic": rospy.get_param("~mag_topic", "/imu/mag"),
+        "export_mag": rospy.get_param("~export_mag", True)
+    }
+    # 解析ROS路径（替换$(find bag2csv)为实际路径）
+    pkg_path = rospy.get_package_path("bag2csv")
+    params["bag_path"] = params["bag_path"].replace("$(find bag2csv)", pkg_path)
+    params["csv_path"] = params["csv_path"].replace("$(find bag2csv)", pkg_path)
+    return params
 
-    def _init_output_dir(self):
-        """初始化输出目录"""
-        if not exists(self.config.output_csv_dir):
-            os.makedirs(self.config.output_csv_dir)
-            rospy.loginfo(f"创建输出目录: {self.config.output_csv_dir}")
+def main():
+    rospy.init_node("bag2csv_node", anonymous=True)
+    params = load_params()
 
-    def _get_time_value(self, stamp):
-        """转换时间戳格式"""
-        if self.config.time_format == "s":
-            return stamp.to_sec()
-        return stamp.to_nsec()
+    csv_dir = os.path.dirname(params["csv_path"])
+    if not os.path.exists(csv_dir):
+        os.makedirs(csv_dir)
+        rospy.loginfo("Created output directory: %s", csv_dir)
 
-    def _extract_message_fields(self, msg):
-        """提取消息字段名和值（递归处理嵌套消息）"""
-        fields = []
-        values = []
-        
-        def _recursive_extract(obj, prefix=""):
-            if hasattr(obj, "__slots__"):
-                for slot in obj.__slots__:
-                    if slot.startswith("_"):
+    try:
+        with rosbag.Bag(params["bag_path"], "r") as bag:
+            # 读取磁力计数据（按时间戳存储）
+            mag_data = defaultdict(dict)
+            if params["export_mag"]:
+                rospy.loginfo("Reading mag data from topic: %s", params["mag_topic"])
+                for topic, msg, t in bag.read_messages(topics=[params["mag_topic"]]):
+                    if isinstance(msg, MagneticField):
+                        timestamp = t.to_sec()
+                        mag_data[timestamp] = {
+                            "x": msg.magnetic_field.x,
+                            "y": msg.magnetic_field.y,
+                            "z": msg.magnetic_field.z
+                        }
+
+            with open(params["csv_path"], "w", encoding="utf-8", newline="") as f:
+                header = ["timestamp", "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z"]
+                if params["export_mag"]:
+                    header += ["mag_x", "mag_y", "mag_z"]
+                writer = csv.writer(f)
+                writer.writerow(header)
+
+                valid_count = 0
+                invalid_count = 0
+                rospy.loginfo("Reading IMU data from topic: %s", params["imu_topic"])
+                for topic, msg, t in bag.read_messages(topics=[params["imu_topic"]]):
+                    if not isinstance(msg, Imu):
+                        invalid_count += 1
                         continue
-                    val = getattr(obj, slot)
-                    _recursive_extract(val, f"{prefix}{slot}.")
-            elif isinstance(obj, list) or isinstance(obj, tuple):
-                for i, item in enumerate(obj):
-                    _recursive_extract(item, f"{prefix}[{i}].")
-            else:
-                fields.append(prefix[:-1])  # 移除末尾的"."
-                values.append(str(obj))
-        
-        _recursive_extract(msg)
-        return fields, values
 
-    def convert(self):
-        """执行bag转csv转换"""
-        try:
-            with rosbag.Bag(self.config.input_bag_path, "r") as bag:
-                # 获取需要处理的话题
-                all_topics = bag.get_type_and_topic_info()[1].keys()
-                target_topics = self.config.target_topics if self.config.target_topics else all_topics
-                
-                # 为每个话题创建CSV文件
-                csv_writers = {}
-                csv_files = {}
-                topic_fields = {}  # 缓存每个话题的字段名
-                
-                for topic, msg, t in bag.read_messages(topics=target_topics):
-                    # 初始化CSV文件
-                    if topic not in csv_writers:
-                        csv_path = join(
-                            self.config.output_csv_dir,
-                            f"{basename(self.config.input_bag_path).split('.')[0]}_{topic.replace('/', '_')}.csv"
-                        )
-                        csv_file = open(csv_path, "w", newline="")
-                        csv_files[topic] = csv_file
-                        csv_writers[topic] = csv.writer(csv_file)
-                        rospy.loginfo(f"创建CSV文件: {csv_path}")
+                    timestamp = t.to_sec()
+                    if timestamp <= 0:
+                        rospy.logwarn("Skip invalid IMU data (timestamp=0)")
+                        invalid_count += 1
+                        continue
+                    if msg.linear_acceleration_covariance[0] <= 0 or msg.angular_velocity_covariance[0] <= 0:
+                        rospy.logwarn("Skip invalid IMU data (covariance=0, timestamp: %.6f)", timestamp)
+                        invalid_count += 1
+                        continue
 
-                    # 提取消息字段和值
-                    if topic not in topic_fields:
-                        # 首次处理该话题，提取字段名
-                        msg_fields, _ = self._extract_message_fields(msg)
-                        topic_fields[topic] = ["timestamp"] + msg_fields
-                        if self.config.include_header:
-                            csv_writers[topic].writerow(topic_fields[topic])
-                    
+                    # 组装IMU数据行
+                    row = [
+                        timestamp,
+                        msg.linear_acceleration.x,
+                        msg.linear_acceleration.y,
+                        msg.linear_acceleration.z,
+                        msg.angular_velocity.x,
+                        msg.angular_velocity.y,
+                        msg.angular_velocity.z
+                    ]
 
-                    # 写入数据行
-                    _, msg_values = self._extract_message_fields(msg)
-                    csv_writers[topic].writerow([self._get_time_value(t)] + msg_values)
+                    # 匹配磁力计数据
+                    if params["export_mag"]:
+                        mag_row = [0.0, 0.0, 0.0]
+                        # 找最接近的时间戳（误差±0.01s）
+                        closest_ts = min(mag_data.keys(), key=lambda k: abs(k - timestamp), default=None)
+                        if closest_ts and abs(closest_ts - timestamp) < 0.01:
+                            mag_row = [
+                                mag_data[closest_ts]["x"],
+                                mag_data[closest_ts]["y"],
+                                mag_data[closest_ts]["z"]
+                            ]
+                        else:
+                            rospy.logwarn("No mag data matched for IMU timestamp: %.6f", timestamp)
+                        row += mag_row
 
-                # 关闭所有文件
-                for f in csv_files.values():
-                    f.close()
-                rospy.loginfo("转换完成!")
+                    writer.writerow(row)
+                    valid_count += 1
 
-        except Exception as e:
-            rospy.logerr(f"转换失败: {str(e)}")
-            raise
+        # 日志统计
+        rospy.loginfo("="*50)
+        rospy.loginfo("Bag2CSV finished successfully!")
+        rospy.loginfo("Valid IMU data written: %d", valid_count)
+        rospy.loginfo("Invalid IMU data skipped: %d", invalid_count)
+        rospy.loginfo("CSV file saved to: %s", params["csv_path"])
+        rospy.loginfo("="*50)
+
+    except Exception as e:
+        rospy.logerr("Failed to process bag file: %s", str(e))
+        sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        rospy.init_node("bag2csv_node")
-        converter = Bag2CSVConverter()
-        converter.convert()
-    except rospy.ROSInterruptException:
-        pass
+    main()

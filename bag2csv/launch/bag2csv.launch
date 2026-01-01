@@ -1,26 +1,52 @@
-<?xml version="1.0"?>
 <launch>
+  <!-- IMU原始数据话题（可通过roslaunch传参覆盖） -->
+  <arg name="imu_topic" default="/imu/data_raw" doc="IMU原始数据话题名"/>
+  <!-- 磁力计话题（可选，若有则导出） -->
+  <arg name="mag_topic" default="/imu/mag" doc="磁力计数据话题名"/>
   <!-- 输入bag文件路径 -->
-  <arg name="input_bag" default="/path/to/data.bag" doc="Input ROS bag file path"/>
-  
-  <!-- 输出CSV目录 -->
-  <arg name="output_dir" default="/path/to/output" doc="Output directory for CSV files"/>
-  
-  <!-- 目标话题（JSON数组格式） -->
-  <arg name="target_topics" default="[]" doc="Target topics (e.g., ['/imu/data', '/odom'])"/>
-  
-  <!-- 选项参数 -->
-  <arg name="include_header" default="true" doc="Include CSV header"/>
-  <arg name="time_format" default="sec" doc="Time format: sec/ns/ms"/>
-  <arg name="verbose" default="false" doc="Enable verbose logging"/>
+  <arg name="bag_path" default="$(find bag2csv)/data/imu.bag" doc="输入的ROS bag文件路径"/>
+  <!-- 输出CSV文件路径 -->
+  <arg name="csv_path" default="$(find bag2csv)/output/imu_data.csv" doc="输出的CSV文件路径"/>
+  <!-- 是否导出磁力计数据 -->
+  <arg name="export_mag" default="true" doc="是否导出磁力计数据（true/false）"/>
 
-  <!-- 启动Python节点 -->
-  <node pkg="bag2csv" type="bag2csv_node.py" name="bag2csv" output="screen">
-    <param name="input_bag" value="$(arg input_bag)"/>
-    <param name="output_dir" value="$(arg output_dir)"/>
-    <param name="target_topics" value="$(arg target_topics)"/>
-    <param name="include_header" value="$(arg include_header)"/>
-    <param name="time_format" value="$(arg time_format)"/>
-    <param name="verbose" value="$(arg verbose)"/>
+  <param name="/use_sim_time" value="true"/>
+
+
+
+
+  <!-- C++节点启动（二选一） -->
+  <node 
+    name="bag2csv_cpp_node" 
+    pkg="bag2csv" 
+    type="bag2csv_node" 
+    output="screen"
+    required="true">
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="mag_topic" value="$(arg mag_topic)"/>
+    <param name="bag_path" value="$(arg bag_path)"/>
+    <param name="csv_path" value="$(arg csv_path)"/>
+    <param name="export_mag" value="$(arg export_mag)"/>
   </node>
+
+
+
+
+
+
+  <!-- Python节点启动（二选一） -->
+  <!--
+  <node 
+    name="bag2csv_py_node" 
+    pkg="bag2csv" 
+    type="bag2csv_node.py" 
+    output="screen"
+    required="true">
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="mag_topic" value="$(arg mag_topic)"/>
+    <param name="bag_path" value="$(arg bag_path)"/>
+    <param name="csv_path" value="$(arg csv_path)"/>
+    <param name="export_mag" value="$(arg export_mag)"/>
+  </node>
+  -->
 </launch>

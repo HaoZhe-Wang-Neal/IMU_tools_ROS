@@ -1,64 +1,51 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 2.8.3)
 project(bag2csv)
 
-# 设置C++标准
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_BUILD_TYPE Release)
-
-
 find_package(catkin REQUIRED COMPONENTS
+  catkin
   roscpp
   rospy
+  rosbag
   sensor_msgs
-  rosbag           # 核心：bag文件处理
-  geometry_msgs    # 处理Vector3/Quaternion等消息
+  std_msgs
 )
 
-# 声明catkin包
+# Python模块配置，支持rosrun调用Python脚本
+catkin_python_setup()
+
+# 导出依赖，供其他包调用时解析
 catkin_package(
-  INCLUDE_DIRS cpp/include
-  LIBRARIES bag2csv_cpp
-  CATKIN_DEPENDS roscpp rospy sensor_msgs rosbag geometry_msgs
+  CATKIN_DEPENDS roscpp rospy rosbag sensor_msgs std_msgs
 )
 
-# C++编译配置
+###########
+## Build ##
+###########
 include_directories(
-  cpp/include
   ${catkin_INCLUDE_DIRS}
 )
 
-# 编译C++核心库
-add_executable(bag2csv_node_cpp
-  cpp/src/bag2csv_node.cpp
-)
-target_link_libraries(bag2csv_node_cpp
+# C++节点编译
+add_executable(${PROJECT_NAME}_node cpp/bag2csv_node.cpp)
+target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
 )
 
-
-# 安装C++节点
-install(TARGETS bag2csv_node_cpp
+#############
+## Install ##
+#############
+# 修复：安装C++可执行文件，确保rosrun能找到
+install(TARGETS ${PROJECT_NAME}_node
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-# 安装C++头文件
-install(DIRECTORY cpp/include/bag2csv/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-)
-
-# Python配置
-catkin_python_setup()
-
-# 安装Python模块
-install(DIRECTORY python/bag2csv/
-  DESTINATION ${CATKIN_PACKAGE_PYTHON_DESTINATION}
-)
-
-
-
-# 安装Python可执行节点
+# 修复：安装Python脚本，确保rosrun能调用
 install(PROGRAMS
-  python/bag2csv/bag2csv_node.py
+  python/bag2csv_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-  RENAME bag2csv_node_py
+)
+
+# 修复：安装launch/config目录，确保roslaunch能找到文件
+install(DIRECTORY launch config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

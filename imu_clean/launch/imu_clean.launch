@@ -1,35 +1,54 @@
 <launch>
-  <!-- 加载配置文件 -->
-  <rosparam command="load" file="$(find imu_clean)/config/example.yaml" />
 
-  <!--可选：覆盖配置参数（示例，可根据场景修改） -->
-  <!-- <param name="imu_clean/imu_topic" value="/your_custom_imu_topic" /> -->
-  <!-- <param name="imu_clean/window_size" value="30" /> -->
 
-  <!-- 启动IMU清洗节点 -->
-  
-  <!-- C++版本（推荐，性能更高，线程安全） -->
-  <node name="imu_clean_node" 
-        pkg="imu_clean" 
-        type="imu_clean_node" 
-        output="screen"
-        respawn="true">
-    <!-- 传递核心参数（也可通过yaml/命令行覆盖） -->
-    <param name="is_9axis" value="$(arg is_9axis)" />
+  <!-- 滑动窗口大小（帧） -->
+  <arg name="window_size" default="10" doc="Sliding window size for IMU cleaning (1-100)"/>
+  <!-- 标准差阈值（超过则判定为异常值） -->
+  <arg name="std_threshold" default="0.1" doc="STD threshold for outlier detection (0.01-1.0)"/>
+  <!-- 陀螺仪单位是否转deg/s（默认rad/s） -->
+  <arg name="gyro_to_deg" default="false" doc="Convert gyro from rad/s to deg/s (true/false)"/>
+  <!-- 订阅的原始IMU话题 -->
+  <arg name="imu_raw_topic" default="/imu/data_raw" doc="Raw IMU data topic"/>
+  <!-- 发布的清洗后IMU话题 -->
+  <arg name="imu_clean_topic" default="/imu/data_clean" doc="Cleaned IMU data topic"/>
+  <!-- 订阅队列大小（适配高频IMU） -->
+  <arg name="queue_size" default="100" doc="Subscriber queue size (for high-frequency IMU)"/>
+
+  <param name="/use_sim_time" value="true"/>
+
+
+
+
+  <!-- C++节点启动（二选一） -->
+  <node 
+    name="imu_clean_cpp_node" 
+    pkg="imu_clean" 
+    type="imu_clean_node" 
+    output="screen"
+    required="true">
+    <remap from="~imu_raw" to="$(arg imu_raw_topic)"/>
+    <remap from="~imu_clean" to="$(arg imu_clean_topic)"/>
+    <!-- 初始参数配置 -->
+    <param name="window_size" value="$(arg window_size)"/>
+    <param name="std_threshold" value="$(arg std_threshold)"/>
+    <param name="gyro_to_deg" value="$(arg gyro_to_deg)"/>
+    <param name="queue_size" value="$(arg queue_size)"/>
   </node>
 
-  <!-- Python版本（灵活，易调试） -->
-  <!-- <node name="imu_clean_py_node" 
-        pkg="imu_clean" 
-        type="imu_data_cleaner.py" 
-        output="screen"
-        respawn="true"
-        args="$(find imu_clean)/config/example.yaml">
-  </node> -->
-
-  <!--  可选：启动rviz查看数据（需提前配置rviz文件） -->
-  <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find imu_clean)/rviz/imu_clean.rviz" /> -->
-
-  <!-- 参数声明（方便启动时动态传参） -->
-  <arg name="is_9axis" default="true" description="是否启用9轴IMU（磁力计）" />
+  <!-- Python节点启动（二选一） -->
+  <!--
+  <node 
+    name="imu_clean_py_node" 
+    pkg="imu_clean" 
+    type="imu_clean_node.py" 
+    output="screen"
+    required="true">
+    <remap from="~imu_raw" to="$(arg imu_raw_topic)"/>
+    <remap from="~imu_clean" to="$(arg imu_clean_topic)"/>
+    <param name="window_size" value="$(arg window_size)"/>
+    <param name="std_threshold" value="$(arg std_threshold)"/>
+    <param name="gyro_to_deg" value="$(arg gyro_to_deg)"/>
+    <param name="queue_size" value="$(arg queue_size)"/>
+  </node>
+  -->
 </launch>

@@ -1,163 +1,179 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
-#include <sensor_msgs/MagneticField.h>
-#include "imu_clean\cpp\include\imu_clean\imu_data_cleaner.h"
-#include <memory>
+#include <dynamic_reconfigure/server.h>
+#include <imu_clean/ImuCleanConfig.h> 
+#include <boost/thread/mutex.hpp>
+#include <Eigen/Dense>
+#include <vector>
+#include <cmath>
+#include <mutex> 
 
-// 封装ROS节点逻辑：避免全局指针，支持6/9轴
-class IMUCleanNode {
-public:
-    IMUCleanNode(ros::NodeHandle& nh) : nh_(nh) {
-        // 1. 从ROS参数服务器读取配置（优先），无则用手写默认值
-        loadConfig();
-
-        // 2. 初始化清洗器
-        cleaner_ = std::make_unique<IMUDataCleaner>(config_);
-
-        // 3. 订阅话题（6轴：仅IMU；9轴：IMU+磁力计）
-        sub_imu_ = nh_.subscribe("/imu/data_raw", 1000, &IMUCleanNode::imuCallback, this);
-        if (config_.is_9axis) {
-            sub_mag_ = nh_.subscribe("/imu/mag", 1000, &IMUCleanNode::magCallback, this);
-        }
-
-        // 4. 发布清洗后的数据
-        pub_cleaned_imu_ = nh_.advertise<sensor_msgs::Imu>("/imu/data_cleaned", 1000);
-        if (config_.is_9axis) {
-            pub_cleaned_mag_ = nh_.advertise<sensor_msgs::MagneticField>("/imu/mag_cleaned", 1000);
-        }
-
-        ROS_INFO("IMU清洗节点启动成功！");
-        ROS_INFO("配置：%d轴 | 滑动窗口大小：%d | 3σ倍数：%.1f",
-                 config_.is_9axis ? 9 : 6,
-                 config_.sliding_window_size,
-                 config_.sigma_multiplier);
-    }
-
-    // IMU回调（6/9轴通用）
-    void imuCallback(const sensor_msgs::Imu::ConstPtr& msg) {
-        // 1. 构造原始IMU数据（6/9轴）
-        IMUData raw_data(config_.is_9axis);
-        raw_data.timestamp = msg->header.stamp.toSec();
-        raw_data.accel << msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z;
-        raw_data.gyro << msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z;
-
-        // 9轴：补充磁力计数据（需先接收mag回调）
-        if (config_.is_9axis) {
-            std::lock_guard<std::mutex> lock(mag_mutex_);
-            if (last_mag_timestamp_ > 0.0) {
-                raw_data.mag = last_mag_data_;
-            } else {
-                ROS_WARN_THROTTLE(1.0, "9轴模式下无磁力计数据！");
-            }
-        }
-
-        // 2. 调用清洗方法
-        IMUData cleaned_data = cleaner_->cleanIMUData(raw_data);
-
-        // 3. 发布清洗后的数据
-        publishCleanedIMU(cleaned_data, msg->header.frame_id);
-
-        // 4. 日志输出（节流1秒）
-        logCleanedData(cleaned_data);
-    }
-
-    // 磁力计回调（9轴专用）
-    void magCallback(const sensor_msgs::MagneticField::ConstPtr& msg) {
-        std::lock_guard<std::mutex> lock(mag_mutex_);
-        last_mag_data_ << msg->magnetic_field.x, msg->magnetic_field.y, msg->magnetic_field.z;
-        last_mag_timestamp_ = msg->header.stamp.toSec();
-    }
-
-private:
-    // ROS相关
-    ros::NodeHandle nh_;
-    ros::Subscriber sub_imu_;
-    ros::Subscriber sub_mag_;
-    ros::Publisher pub_cleaned_imu_;
-    ros::Publisher pub_cleaned_mag_;
-
-    // 清洗器（智能指针：自动释放）
-    std::unique_ptr<IMUDataCleaner> cleaner_;
-
-    // 配置
-    IMUCleanConfig config_;
-
-    // 9轴磁力计缓存
-    std::mutex mag_mutex_;
-    Eigen::Vector3d last_mag_data_;
-    double last_mag_timestamp_ = 0.0;
-
-    // 加载配置：优先ROS参数，无则手写默认值
-    void loadConfig() {
-        // 【用户可直接修改此处手写默认值】
-        config_.is_9axis = false;          // 默认6轴，改为true则9轴
-        config_.sliding_window_size = 20;  // 滑动窗口大小
-        config_.sigma_multiplier = 3.0;    // 3σ倍数
-
-        // 绝对阈值（兜底）
-        config_.accel_abs_thresh = 15.0;   // 加速度绝对阈值
-        config_.gyro_abs_thresh = 4.0;     // 角速度绝对阈值
-        config_.mag_abs_thresh = 500.0;    // 磁力计绝对阈值
-
-        // 从ROS参数服务器读取
-        nh_.param("imu_clean/is_9axis", config_.is_9axis, config_.is_9axis);
-        nh_.param("imu_clean/sliding_window_size", config_.sliding_window_size, config_.sliding_window_size);
-        nh_.param("imu_clean/sigma_multiplier", config_.sigma_multiplier, config_.sigma_multiplier);
-        nh_.param("imu_clean/accel_abs_thresh", config_.accel_abs_thresh, config_.accel_abs_thresh);
-        nh_.param("imu_clean/gyro_abs_thresh", config_.gyro_abs_thresh, config_.gyro_abs_thresh);
-        nh_.param("imu_clean/mag_abs_thresh", config_.mag_abs_thresh, config_.mag_abs_thresh);
-    }
-
-    // 发布清洗后的IMU数据
-    void publishCleanedIMU(const IMUData& cleaned_data, const std::string& frame_id) {
-        sensor_msgs::Imu msg;
-        msg.header.stamp = ros::Time(cleaned_data.timestamp);
-        msg.header.frame_id = frame_id;
-
-        // 填充清洗后的数据
-        msg.linear_acceleration.x = cleaned_data.accel.x();
-        msg.linear_acceleration.y = cleaned_data.accel.y();
-        msg.linear_acceleration.z = cleaned_data.accel.z();
-        msg.angular_velocity.x = cleaned_data.gyro.x();
-        msg.angular_velocity.y = cleaned_data.gyro.y();
-        msg.angular_velocity.z = cleaned_data.gyro.z();
-
-        // 发布IMU
-        pub_cleaned_imu_.publish(msg);
-
-        // 9轴：发布磁力计
-        if (config_.is_9axis) {
-            sensor_msgs::MagneticField mag_msg;
-            mag_msg.header.stamp = ros::Time(cleaned_data.timestamp);
-            mag_msg.header.frame_id = frame_id;
-            mag_msg.magnetic_field.x = cleaned_data.mag.x();
-            mag_msg.magnetic_field.y = cleaned_data.mag.y();
-            mag_msg.magnetic_field.z = cleaned_data.mag.z();
-            pub_cleaned_mag_.publish(mag_msg);
-        }
-    }
-
-    // 日志输出
-    void logCleanedData(const IMUData& cleaned_data) {
-        if (cleaned_data.is_filled) {
-            ROS_WARN_THROTTLE(1.0, "检测到IMU野值，已用前一帧填充！");
-        } else {
-            ROS_INFO_THROTTLE(1.0, "有效IMU数据 | 加速度x=%.2f | 角速度x=%.2f | %d轴",
-                              cleaned_data.accel.x(),
-                              cleaned_data.gyro.x(),
-                              config_.is_9axis ? 9 : 6);
-        }
-    }
+// 全局参数与数据结构
+struct ImuCleanParams {
+  int window_size = 10;
+  double std_threshold = 0.1;
+  bool gyro_to_deg = false;
 };
 
-// 主函数
+struct ImuData {
+  double timestamp;
+  Eigen::Vector3d accel; // 加速度
+  Eigen::Vector3d gyro;  // 陀螺仪
+};
+
+class ImuCleaner {
+private:
+  ros::NodeHandle nh_;
+  ros::Subscriber imu_sub_;
+  ros::Publisher imu_pub_;
+  dynamic_reconfigure::Server<imu_clean::ImuCleanConfig> dyn_srv_;
+  ImuCleanParams params_;
+  std::vector<ImuData> imu_window_;
+  std::mutex mutex_; 
+
+  // 动态参数回调函数
+  void reconfigCallback(imu_clean::ImuCleanConfig& config, uint32_t level) {
+    std::lock_guard<std::mutex> lock(mutex_); 
+    params_.window_size = config.window_size;
+    params_.std_threshold = config.std_threshold;
+    params_.gyro_to_deg = config.gyro_to_deg;
+    ROS_INFO("Dynamic params updated: window_size=%d, std_threshold=%.2f, gyro_to_deg=%d",
+             params_.window_size, params_.std_threshold, params_.gyro_to_deg);
+  }
+
+  // 滑动窗口统计计算（均值+标准差）
+  bool calculateStats(const std::vector<ImuData>& window, 
+                      Eigen::Vector3d& accel_mean, Eigen::Vector3d& accel_std,
+                      Eigen::Vector3d& gyro_mean, Eigen::Vector3d& gyro_std) {
+  
+
+    if (window.size() < params_.window_size) {
+      ROS_WARN_THROTTLE(1, "Window not full (current: %lu, required: %d)", window.size(), params_.window_size);
+      return false;
+    }
+
+    // 计算均值
+    accel_mean.setZero();
+    gyro_mean.setZero();
+    for (const auto& data : window) {
+      accel_mean += data.accel;
+      gyro_mean += data.gyro;
+    }
+    accel_mean /= window.size();
+    gyro_mean /= window.size();
+
+    // 计算标准差
+    accel_std.setZero();
+    gyro_std.setZero();
+    for (const auto& data : window) {
+      accel_std += (data.accel - accel_mean).cwiseAbs2();
+      gyro_std += (data.gyro - gyro_mean).cwiseAbs2();
+    }
+    accel_std = (accel_std / window.size()).cwiseSqrt();
+    gyro_std = (gyro_std / window.size()).cwiseSqrt();
+
+    return true;
+  }
+
+  // IMU回调函数
+  void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
+    std::lock_guard<std::mutex> lock(mutex_); 
+
+    // 过滤无效数据
+    double timestamp = imu_msg->header.stamp.toSec();
+    if (timestamp <= 0) {
+      ROS_WARN_THROTTLE(1, "Skip invalid IMU data (timestamp=0)");
+      return;
+    }
+    if (imu_msg->linear_acceleration_covariance[0] <= 0 || imu_msg->angular_velocity_covariance[0] <= 0) {
+      ROS_WARN_THROTTLE(1, "Skip invalid IMU data (covariance=0)");
+      return;
+    }
+
+    // 转换数据格式
+    ImuData data;
+    data.timestamp = timestamp;
+    data.accel << imu_msg->linear_acceleration.x, imu_msg->linear_acceleration.y, imu_msg->linear_acceleration.z;
+    data.gyro << imu_msg->angular_velocity.x, imu_msg->angular_velocity.y, imu_msg->angular_velocity.z;
+
+    // 维护滑动窗口（超出大小则弹出最早数据）
+    imu_window_.push_back(data);
+    if (imu_window_.size() > params_.window_size) {
+      imu_window_.erase(imu_window_.begin());
+    }
+
+    // 计算统计值并发布清洗后数据
+    Eigen::Vector3d accel_mean, accel_std, gyro_mean, gyro_std;
+    if (calculateStats(imu_window_, accel_mean, accel_std, gyro_mean, gyro_std)) {
+      // 过滤异常值（超过标准差阈值则用均值替代）
+      Eigen::Vector3d clean_accel = accel_mean;
+      Eigen::Vector3d clean_gyro = gyro_mean;
+      for (int i = 0; i < 3; ++i) {
+        if (std::fabs(data.accel[i] - accel_mean[i]) < params_.std_threshold * accel_std[i]) {
+          clean_accel[i] = data.accel[i];
+        }
+        if (std::fabs(data.gyro[i] - gyro_mean[i]) < params_.std_threshold * gyro_std[i]) {
+          clean_gyro[i] = data.gyro[i];
+        }
+      }
+
+      sensor_msgs::Imu clean_msg;
+      clean_msg.header = imu_msg->header; 
+      
+      
+      clean_msg.linear_acceleration.x = clean_accel[0];
+      clean_msg.linear_acceleration.y = clean_accel[1];
+      clean_msg.linear_acceleration.z = clean_accel[2];
+      if (params_.gyro_to_deg) {
+        clean_msg.angular_velocity.x = clean_gyro[0] * 180 / M_PI;
+        clean_msg.angular_velocity.y = clean_gyro[1] * 180 / M_PI;
+        clean_msg.angular_velocity.z = clean_gyro[2] * 180 / M_PI;
+      } else {
+        clean_msg.angular_velocity.x = clean_gyro[0];
+        clean_msg.angular_velocity.y = clean_gyro[1];
+        clean_msg.angular_velocity.z = clean_gyro[2];
+      }
+
+      // 复用原始协方差
+      clean_msg.linear_acceleration_covariance = imu_msg->linear_acceleration_covariance;
+      clean_msg.angular_velocity_covariance = imu_msg->angular_velocity_covariance;
+      clean_msg.orientation_covariance = imu_msg->orientation_covariance;
+
+      // 发布清洗后数据
+      imu_pub_.publish(clean_msg);
+      ROS_DEBUG("Published cleaned IMU data (timestamp: %.6f)", timestamp);
+    }
+  }
+
+public:
+  ImuCleaner() : nh_("~") {
+    // 加载初始参数
+    nh_.param<int>("window_size", params_.window_size, 10);
+    nh_.param<double>("std_threshold", params_.std_threshold, 0.1);
+    nh_.param<bool>("gyro_to_deg", params_.gyro_to_deg, false);
+
+    // 初始化动态参数服务器
+    dynamic_reconfigure::Server<imu_clean::ImuCleanConfig>::CallbackType f;
+    f = boost::bind(&ImuCleaner::reconfigCallback, this, _1, _2);
+    dyn_srv_.setCallback(f);
+
+    // 订阅原始IMU话题，设置队列大小
+    int queue_size;
+    nh_.param<int>("queue_size", queue_size, 100);
+    imu_sub_ = nh_.subscribe("imu_raw", queue_size, &ImuCleaner::imuCallback, this);
+
+    // 发布清洗后IMU话题
+    imu_pub_ = nh_.advertise<sensor_msgs::Imu>("imu_clean", queue_size);
+
+    ROS_INFO("ImuCleaner initialized: window_size=%d, std_threshold=%.2f, gyro_to_deg=%d",
+             params_.window_size, params_.std_threshold, params_.gyro_to_deg);
+  }
+};
+
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "imu_clean_node");
-    ros::NodeHandle nh("~"); // 私有命名空间，方便参数配置
-
-    // 初始化节点
-    IMUCleanNode node(nh);
-
-    ros::spin();
-    return 0;
+  ros::init(argc, argv, "imu_clean_node");
+  ImuCleaner cleaner;
+  ROS_INFO("IMU clean node started, waiting for IMU data...");
+  ros::spin();
+  return 0;
 }
