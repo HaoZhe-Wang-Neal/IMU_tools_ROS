@@ -1,0 +1,23 @@
+# VQF姿态解算配置文件
+vqf:
+  # 话题配置
+  imu_topic: "/imu/cleaned"      # 输入清洗后的IMU话题（加速度+角速度）
+  mag_topic: "/imu/mag"          # 磁力计话题（9轴启用）
+  output_topic: "/imu/vqf/pose"  # 输出姿态话题（quaternion）
+  output_rpy_topic: "/imu/vqf/rpy" # 输出RPY话题（弧度）
+  frame_id: "imu_link"           # IMU坐标系ID
+
+  # 基础配置
+  is_9axis: true                 # 是否启用9轴（磁力计融合）
+  publish_rate: 100.0            # 发布频率(Hz)
+  init_orientation: [0.0, 0.0, 0.0, 1.0] # 初始姿态四元数 [x,y,z,w]
+
+  # VQF算法核心参数
+  kp_acc: 1.0                    # 加速度计比例增益
+  ki_acc: 0.01                   # 加速度计积分增益
+  kp_mag: 0.5                    # 磁力计比例增益（9轴启用）
+  ki_mag: 0.005                  # 磁力计积分增益（9轴启用）
+  gyro_noise: 0.01               # 陀螺仪噪声方差
+  accel_noise: 0.1               # 加速度计噪声方差
+  mag_noise: 0.05                # 磁力计噪声方差（9轴启用）
+  sample_freq: 100.0             # 采样频率(Hz)，需与IMU数据频率匹配
