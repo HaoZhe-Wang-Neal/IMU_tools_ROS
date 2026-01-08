@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 #include <memory> 
-
 // 全局参数结构体
 struct Params {
   std::string bag_path;

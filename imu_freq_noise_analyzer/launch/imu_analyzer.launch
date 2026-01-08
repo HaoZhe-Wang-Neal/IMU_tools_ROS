@@ -1,0 +1,34 @@
+<launch>
+  <!-- 模式参数：cpp/python | offline/online -->
+  <arg name="lang" default="cpp" />
+  <arg name="mode" default="offline" />
+  
+  <!-- 加载通用配置文件 -->
+  <rosparam command="load" file="$(find imu_freq_noise_analyzer)/config/imu_analyzer_config.yaml" />
+  
+  <!-- 覆盖运行模式 -->
+  <param name="imu_analyzer/mode" value="$(arg mode)" />
+  
+  <!-- C++节点启动 -->
+  <group if="$(eval lang == 'cpp')">
+    <node name="imu_freq_noise_analyzer_node" 
+          pkg="imu_freq_noise_analyzer" 
+          type="imu_freq_noise_analyzer_node" 
+          output="screen"
+          args="$(find imu_freq_noise_analyzer)/config/imu_analyzer_config.yaml" />
+  </group>
+  
+  <!-- Python节点启动 -->
+  <group if="$(eval lang == 'python')">
+    <node name="imu_freq_noise_analyzer_node" 
+          pkg="imu_freq_noise_analyzer" 
+          type="imu_analyzer_node.py" 
+          output="screen"
+          args="$(find imu_freq_noise_analyzer)/config/imu_analyzer_config.yaml" />
+  </group>
+  
+  <!-- 在线模式额外参数 -->
+  <group if="$(eval mode == 'online')">
+    <param name="imu_analyzer/collect_duration" value="10.0" /> <!-- 在线采集10秒 -->
+  </group>
+</launch>

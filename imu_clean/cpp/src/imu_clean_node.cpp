@@ -1,7 +1,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <dynamic_reconfigure/server.h>
-#include <imu_clean/ImuCleanConfig.h> 
+#include "imu_clean\cpp\include\imu_clean\imu_data_cleaner.h"
 #include <boost/thread/mutex.hpp>
 #include <Eigen/Dense>
 #include <vector>

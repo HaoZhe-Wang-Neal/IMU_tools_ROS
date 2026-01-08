@@ -1,0 +1,40 @@
+# IMU频率/噪声分析通用配置（C++/Python共用）
+imu_analyzer:
+  # 基础配置
+  mode: "offline"                  # 运行模式：offline/online
+  imu_topic: "/imu/data_raw"       # IMU话题名称
+  mag_topic: "/imu/mag"            # 磁力计话题名称
+  use_mag: false                   # 是否使用磁力计
+  sample_rate: 100.0               # 原始采样率(Hz)
+  
+  # 离线模式配置
+  bag_path: "$(find imu_freq_noise_analyzer)/data/imu_test.bag"  # bag文件路径
+  start_time: 0.0                  # 起始时间(秒，0=全部)
+  end_time: 0.0                    # 结束时间(秒，0=全部)
+  
+  # 预处理配置
+  preprocess:
+    enable: true                   # 是否启用预处理
+    sigma: 3.0                     # 3σ异常值过滤系数
+    lowpass_cutoff: 10.0           # 低通截止频率(Hz)
+    resample_rate: 100.0           # 重采样率(Hz)
+  
+  # 频域分析配置
+  freq_analysis:
+    enable: true                   # 是否启用频域分析
+    fft_size: 1024                 # FFT长度
+    window: "hann"                 # 窗函数：hann/hamming/rect
+  
+  # Allan方差分析配置
+  allan_analysis:
+    enable: true                   # 是否启用Allan分析
+    max_tau: 100.0                 # 最大tau值(秒)
+    tau_num: 100                   # tau点数
+  
+  # 输出配置
+  output:
+    dir: "$(find imu_freq_noise_analyzer)/results"  # 结果保存目录
+    plot: true                     # 是否生成图表(Python有效)
+  
+  # 在线模式扩展配置
+  collect_duration: 0.0            # 在线采集时长(秒，0=无限采集)
