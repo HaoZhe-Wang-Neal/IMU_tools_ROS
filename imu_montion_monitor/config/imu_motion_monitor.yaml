@@ -1,0 +1,45 @@
+# ===================== 全局通用配置（所有场景共享） =====================
+global:
+  imu_topic: "/imu/data"          # 所有场景默认订阅的IMU原始话题
+  window_size: 5                  # 滑动窗口大小（帧，100Hz IMU对应50ms）
+  anomaly_msg_type: "bool"        # 异常话题类型：bool（std_msgs/Bool）或 custom（自定义ImuAnomaly）
+
+# ===================== 激活场景指定（修改此处切换场景） =====================
+active_scene: "mobile_robot"      # 可选值：mobile_robot / drone / arm
+
+# ===================== 场景专属配置块（新增场景仅需添加此块） =====================
+# 场景1：移动机器人-轮子打滑
+mobile_robot:
+  # 覆盖全局IMU话题（可选）
+  imu_topic: "/mobile_robot/imu/data"
+  # 异常话题名
+  anomaly_topic: "/mobile_robot/imu_anomaly"
+  # 异常检测阈值
+  detect_thresholds:
+    angular_z_diff: 1.0           # z轴角速度帧间突变阈值（rad/s）
+    accel_xy_var: 0.1             # x/y轴加速度方差阈值（m²/s⁴）
+  # 异常判定规则（逻辑层按此实现）
+  detect_rule: "|当前z轴角速度 - 窗口首帧z轴角速度| > angular_z_diff AND x/y轴加速度方差 < accel_xy_var AND 持续window_size帧 → 异常"
+  # 异常类型标识（发布自定义消息时用）
+  anomaly_type: "wheel_slip"
+
+# 场景2：无人机-机身抖震
+drone:
+  anomaly_topic: "/drone/imu_anomaly"
+  detect_thresholds:
+    angular_var_avg: 0.2          # 三轴角速度方差均值阈值（rad²/s²）
+
+    # 异常判定规则（逻辑层按此实现）
+  detect_rule: "三轴角速度方差均值 > angular_var_avg AND 持续window_size帧 → 异常"
+  anomaly_type: "body_vibration"
+
+# 场景3：机械臂-碰撞冲击
+arm:
+  window_size: 1                  # 覆盖全局窗口大小（碰撞为瞬时事件）
+  anomaly_topic: "/arm/imu_anomaly"
+  detect_thresholds:
+    accel_peak: 5.0               # x/y/z轴加速度峰值阈值（m/s²）
+  
+  # 异常判定规则（逻辑层按此实现）
+  detect_rule: "任一轴加速度绝对值 > accel_peak → 异常"
+  anomaly_type: "collision_impact"

@@ -1,0 +1,24 @@
+<launch>
+  <!-- 加载配置文件 -->
+  <rosparam command="load" file="$(find imu_motion_monitor)/config/imu_motion_monitor.yaml" />
+  
+  <!-- 启动C++版本节点 -->
+  <node 
+    name="imu_motion_monitor_node_cpp" 
+    pkg="imu_motion_monitor" 
+    type="imu_motion_monitor_node" 
+    output="screen"
+    required="true"
+  />
+
+  <!-- 启动Python版本节点 -->
+  <!--
+  <node 
+    name="imu_motion_monitor_node_py" 
+    pkg="imu_motion_monitor" 
+    type="imu_motion_monitor_node.py" 
+    output="screen"
+    required="true"
+  />
+  -->
+</launch>
